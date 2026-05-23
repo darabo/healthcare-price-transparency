@@ -8,6 +8,7 @@ An AI-powered patient advocate chatbot that helps consumers understand, compare,
 - **Price Comparison** — Finds lower-cost care options for the same procedure, showing what other facilities and payers are charging.
 - **Negotiation & Dispute Support** — Generates phone scripts, email templates, and step-by-step checklists to help patients challenge overcharges, backed by the benchmark data the agent already gathered.
 - **General Healthcare Pricing Questions** — Answers open-ended questions about procedure costs, insurance terminology, and billing practices using web-sourced evidence.
+- **LLM Observability** — Datadog Lapdog is used for local LLM observability — **no Datadog account required**. Every agent run, tool call, and Gemini LLM invocation is emitted as a structured span you can inspect in a browser dashboard.
 
 ## How It Works
 
@@ -33,14 +34,14 @@ User message
 
 ## Data Sources
 
-| Source | Coverage | Key Required? |
-|--------|----------|---------------|
-| [Medical Costs API](https://medical-costs-api.david-568.workers.dev) | National Medicare procedure benchmarks & negotiated rates by state | No |
-| [PRA / NYC Hospital Price Finder](https://nychospitalpricefinder.patientrightsadvocate.org/) | Real negotiated rates from NY hospital MRFs (all payers) | No |
-| [CMS Provider Data Catalog](https://data.cms.gov) | Hospital identification, quality ratings, general info | No |
-| [Google Gemini](https://ai.google.dev) | AI-generated patient explanations | Yes |
-| [Nimble](https://nimbledata.com) | Rendered web extraction for hospital pricing pages | Yes (optional) |
-| ClickHouse | Self-hosted warehouse for parsed MRF charge rows | Self-hosted |
+| Source                                                                                       | Coverage                                                           | Key Required?  |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------- |
+| [Medical Costs API](https://medical-costs-api.david-568.workers.dev)                         | National Medicare procedure benchmarks & negotiated rates by state | No             |
+| [PRA / NYC Hospital Price Finder](https://nychospitalpricefinder.patientrightsadvocate.org/) | Real negotiated rates from NY hospital MRFs (all payers)           | No             |
+| [CMS Provider Data Catalog](https://data.cms.gov)                                            | Hospital identification, quality ratings, general info             | No             |
+| [Google Gemini](https://ai.google.dev)                                                       | AI-generated patient explanations                                  | Yes            |
+| [Nimble](https://nimbledata.com)                                                             | Rendered web extraction for hospital pricing pages                 | Yes (optional) |
+| ClickHouse                                                                                   | Self-hosted warehouse for parsed MRF charge rows                   | Self-hosted    |
 
 ## Quick Start
 
@@ -78,22 +79,22 @@ The agent will return a fairness assessment, benchmark comparisons, real negotia
 
 ### Required
 
-| Variable | Purpose |
-|----------|---------|
+| Variable         | Purpose                                                     |
+| ---------------- | ----------------------------------------------------------- |
 | `GEMINI_API_KEY` | Google AI Studio API key for patient-facing AI explanations |
 
 ### Optional
 
-| Variable | Purpose |
-|----------|---------|
-| `NIMBLE_API_KEY` | Nimble rendered web extraction for hospital pricing pages |
-| `HOSPITAL_MRF_SOURCES` | Comma-separated local paths or URLs to hospital MRF CSV/JSON files |
-| `HOSPITAL_MRF_MAX_BYTES` | Max bytes to download per MRF file (default: 50 MB) |
-| `CLICKHOUSE_URL` | ClickHouse HTTP endpoint for normalized MRF charge queries |
-| `CLICKHOUSE_USER` | ClickHouse username |
-| `CLICKHOUSE_PASSWORD` | ClickHouse password |
-| `CLICKHOUSE_DATABASE` | ClickHouse database name |
-| `CLICKHOUSE_MRF_TABLE` | ClickHouse table name for MRF charge rows |
+| Variable                 | Purpose                                                            |
+| ------------------------ | ------------------------------------------------------------------ |
+| `NIMBLE_API_KEY`         | Nimble rendered web extraction for hospital pricing pages          |
+| `HOSPITAL_MRF_SOURCES`   | Comma-separated local paths or URLs to hospital MRF CSV/JSON files |
+| `HOSPITAL_MRF_MAX_BYTES` | Max bytes to download per MRF file (default: 50 MB)                |
+| `CLICKHOUSE_URL`         | ClickHouse HTTP endpoint for normalized MRF charge queries         |
+| `CLICKHOUSE_USER`        | ClickHouse username                                                |
+| `CLICKHOUSE_PASSWORD`    | ClickHouse password                                                |
+| `CLICKHOUSE_DATABASE`    | ClickHouse database name                                           |
+| `CLICKHOUSE_MRF_TABLE`   | ClickHouse table name for MRF charge rows                          |
 
 ### Loading MRF data into ClickHouse
 
@@ -138,15 +139,15 @@ If Lapdog / `ddtrace` is not installed, the instrumentation is a complete no-op 
 
 **Response** includes:
 
-| Field | Description |
-|-------|-------------|
-| `answer` | AI-generated patient-facing explanation |
-| `case_type` | Classified workflow (`estimate_review`, `find_cheaper_care`, `negotiate_or_dispute`, `general_inquiry`) |
-| `facts` | Extracted procedure, amount, payer, location, and CPT candidates |
-| `cards` | Structured data cards: fairness score, rate distribution, care options, CMS benchmarks, hospital matches, MRF negotiated rates |
-| `artifact` | Negotiation phone script, email template, and checklist (when applicable) |
-| `tool_trace` | Full audit trail of every tool invoked and its output |
-| `guardrails` | Safety and price-certainty caveats |
+| Field        | Description                                                                                                                    |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `answer`     | AI-generated patient-facing explanation                                                                                        |
+| `case_type`  | Classified workflow (`estimate_review`, `find_cheaper_care`, `negotiate_or_dispute`, `general_inquiry`)                        |
+| `facts`      | Extracted procedure, amount, payer, location, and CPT candidates                                                               |
+| `cards`      | Structured data cards: fairness score, rate distribution, care options, CMS benchmarks, hospital matches, MRF negotiated rates |
+| `artifact`   | Negotiation phone script, email template, and checklist (when applicable)                                                      |
+| `tool_trace` | Full audit trail of every tool invoked and its output                                                                          |
+| `guardrails` | Safety and price-certainty caveats                                                                                             |
 
 ## Architecture
 
