@@ -11,6 +11,7 @@ let caseId = null;
 let lastResponse = null;
 let activeTab = "comparison";
 
+/* ── Preset sidebar buttons ──────────────────────────── */
 document.querySelectorAll(".preset").forEach((button) => {
   button.addEventListener("click", () => {
     input.value = button.dataset.prompt;
@@ -18,6 +19,15 @@ document.querySelectorAll(".preset").forEach((button) => {
   });
 });
 
+/* ── Welcome chips ───────────────────────────────────── */
+document.querySelectorAll(".chip").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    input.value = chip.dataset.prompt;
+    form.requestSubmit();
+  });
+});
+
+/* ── Tabs ────────────────────────────────────────────── */
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => {
     activeTab = tab.dataset.tab;
@@ -26,6 +36,7 @@ document.querySelectorAll(".tab").forEach((tab) => {
   });
 });
 
+/* ── File upload ─────────────────────────────────────── */
 fileInput.addEventListener("change", async () => {
   const file = fileInput.files[0];
   if (!file) return;
@@ -34,14 +45,37 @@ fileInput.addEventListener("change", async () => {
   fileInput.value = "";
 });
 
+/* ── Auto-resize textarea ────────────────────────────── */
+input.addEventListener("input", () => {
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 160) + "px";
+});
+
+/* ── Submit on Enter (Shift+Enter for newline) ───────── */
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    form.requestSubmit();
+  }
+});
+
+/* ── Form submission ─────────────────────────────────── */
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = input.value.trim();
   if (!message) return;
 
+  // Remove welcome hero on first message
+  const hero = document.querySelector(".welcome-hero");
+  if (hero) hero.remove();
+
   appendMessage("user", message);
   input.value = "";
+  input.style.height = "auto";
   sendButton.disabled = true;
+
+  // Show typing indicator
+  const typingEl = showTypingIndicator();
 
   try {
     const response = await fetch("/api/chat", {
@@ -53,18 +87,35 @@ form.addEventListener("submit", async (event) => {
     if (!response.ok) throw new Error(payload.error || "Request failed");
     caseId = payload.case_id;
     lastResponse = payload;
+    typingEl.remove();
     appendMessage("assistant", payload.answer, payload.guardrails);
     updateFacts(payload);
     details.hidden = false;
     renderDetails();
   } catch (error) {
-    appendMessage("assistant", `Request failed: ${error.message}`);
+    typingEl.remove();
+    appendMessage("assistant", `Something went wrong: ${error.message}`);
   } finally {
     sendButton.disabled = false;
     input.focus();
   }
 });
 
+/* ── Typing indicator ────────────────────────────────── */
+function showTypingIndicator() {
+  const article = document.createElement("article");
+  article.className = "message assistant";
+  article.innerHTML = `
+    <div class="bubble typing-indicator">
+      <span></span><span></span><span></span>
+    </div>
+  `;
+  messages.appendChild(article);
+  messages.scrollTop = messages.scrollHeight;
+  return article;
+}
+
+/* ── Message rendering ───────────────────────────────── */
 function appendMessage(role, text, guardrails = []) {
   const article = document.createElement("article");
   article.className = `message ${role}`;
@@ -85,17 +136,26 @@ function appendMessage(role, text, guardrails = []) {
   messages.scrollTop = messages.scrollHeight;
 }
 
+/* ── Facts panel ─────────────────────────────────────── */
 function updateFacts(payload) {
   const facts = payload.facts;
+  const caseType = payload.case_type;
+  const statusBadge = {
+    estimate_review: '<span class="badge badge-warn">Review</span>',
+    find_cheaper_care: '<span class="badge badge-success">Compare</span>',
+    negotiate_or_dispute: '<span class="badge badge-danger">Negotiate</span>',
+    general_inquiry: '<span class="badge badge-neutral">Inquiry</span>',
+  };
   factsPanel.innerHTML = `
-    <div><dt>Type</dt><dd>${escapeHtml(payload.case_type)}</dd></div>
+    <div><dt>Status</dt><dd>${statusBadge[caseType] || escapeHtml(caseType)}</dd></div>
+    <div><dt>CPT</dt><dd>${escapeHtml(facts.cpt_candidates.join(", ") || "—")}</dd></div>
+    <div><dt>Amount</dt><dd>${facts.amount ? formatMoney(facts.amount) : "—"}</dd></div>
     <div><dt>Confidence</dt><dd>${escapeHtml(facts.confidence)}</dd></div>
-    <div><dt>CPT</dt><dd>${escapeHtml(facts.cpt_candidates.join(", ") || "-")}</dd></div>
-    <div><dt>Amount</dt><dd>${facts.amount ? formatMoney(facts.amount) : "-"}</dd></div>
     <div><dt>Missing</dt><dd>${escapeHtml(facts.missing.join(", ") || "None")}</dd></div>
   `;
 }
 
+/* ── Detail tabs ─────────────────────────────────────── */
 function renderDetails() {
   if (!lastResponse) return;
   if (activeTab === "comparison") {
@@ -120,7 +180,7 @@ function renderComparison(payload) {
   const optionCards = options.map((option) => `
     <div class="card">
       <h3>${escapeHtml(option.provider)}</h3>
-      <p><strong>${formatMoney(option.estimated_allowed)}</strong> estimated allowed</p>
+      <p><strong>${formatMoney(option.estimated_allowed)}</strong> estimated</p>
       <p>${escapeHtml(option.facility_type)} · ${escapeHtml(option.location)}</p>
       <p>${escapeHtml(option.network_status)}</p>
     </div>
@@ -140,8 +200,8 @@ function renderComparison(payload) {
       <div class="card">
         <h3>Benchmark</h3>
         ${rate ? `
-          <p>P25 ${formatMoney(rate.p25)} · Median ${formatMoney(rate.median)} · P75 ${formatMoney(rate.p75)}</p>
-          <p>${escapeHtml(rate.sample_size)} sample observations · ${escapeHtml(rate.source)}</p>
+          <p><strong>P25</strong> ${formatMoney(rate.p25)} · <strong>Median</strong> ${formatMoney(rate.median)} · <strong>P75</strong> ${formatMoney(rate.p75)}</p>
+          <p>${escapeHtml(rate.sample_size)} samples · ${escapeHtml(rate.source)}</p>
         ` : "<p>No benchmark found.</p>"}
       </div>
       <div class="card">
@@ -156,7 +216,7 @@ function renderComparison(payload) {
         <h3>Hospital MRF</h3>
         ${renderMrfMatches(mrfMatches)}
       </div>
-      ${optionCards || `<div class="card"><h3>Care Options</h3><p>No options found in the sample index.</p></div>`}
+      ${optionCards || `<div class="card"><h3>Care Options</h3><p>No options found.</p></div>`}
       <div class="card">
         <h3>Public Evidence</h3>
         ${renderEvidence(evidence)}
@@ -174,10 +234,10 @@ function renderAi(ai) {
 }
 
 function renderHospitals(hospitals) {
-  if (!hospitals.length) return "<p>No CMS open hospital lookup was run.</p>";
+  if (!hospitals.length) return "<p>No CMS hospital data available.</p>";
   return hospitals.map((hospital) => {
     if (hospital.status !== "found") {
-      return `<p>${escapeHtml(hospital.status)}</p><p>${escapeHtml(hospital.message || "No hospital match returned.")}</p>`;
+      return `<p>${escapeHtml(hospital.status)}</p><p>${escapeHtml(hospital.message || "No match.")}</p>`;
     }
     return `
       <p><strong>${escapeHtml(hospital.facility_name)}</strong></p>
@@ -188,20 +248,20 @@ function renderHospitals(hospitals) {
 }
 
 function renderMrfMatches(matches) {
-  if (!matches.length) return "<p>No hospital MRF parse was run.</p>";
+  if (!matches.length) return "<p>No hospital MRF data available.</p>";
   return matches.map((match) => {
     if (match.status !== "found") {
-      return `<p>${escapeHtml(match.status)}</p><p>${escapeHtml(match.message || "No MRF match returned.")}</p>`;
+      return `<p>${escapeHtml(match.status)}</p><p>${escapeHtml(match.message || "No MRF match.")}</p>`;
     }
     const priceParts = [];
     if (match.negotiated_dollar) priceParts.push(`Negotiated ${formatMoney(match.negotiated_dollar)}`);
     if (match.discounted_cash) priceParts.push(`Cash ${formatMoney(match.discounted_cash)}`);
     if (match.gross_charge) priceParts.push(`Gross ${formatMoney(match.gross_charge)}`);
-    if (match.median_allowed) priceParts.push(`Median allowed ${formatMoney(match.median_allowed)}`);
+    if (match.median_allowed) priceParts.push(`Median ${formatMoney(match.median_allowed)}`);
     return `
       <p><strong>${escapeHtml(match.description || match.code)}</strong></p>
-      <p>${escapeHtml([match.payer_name, match.plan_name].filter(Boolean).join(" · ") || "All payers / not specified")}</p>
-      <p>${escapeHtml(priceParts.join(" · ") || "No dollar amount in matched row")}</p>
+      <p>${escapeHtml([match.payer_name, match.plan_name].filter(Boolean).join(" · ") || "All payers")}</p>
+      <p>${escapeHtml(priceParts.join(" · ") || "No dollar amount")}</p>
       <p>${escapeHtml(match.hospital_name || match.source)}</p>
     `;
   }).join("");
@@ -209,7 +269,7 @@ function renderMrfMatches(matches) {
 
 function renderCms(cms) {
   if (cms.status !== "found") {
-    return `<p>${escapeHtml(cms.status)}</p><p>${escapeHtml(cms.message || "No CMS benchmark returned.")}</p>`;
+    return `<p>${escapeHtml(cms.status)}</p><p>${escapeHtml(cms.message || "No CMS benchmark.")}</p>`;
   }
   const parts = [];
   if (cms.hospital_outpatient_payment) parts.push(`HOPD ${formatMoney(cms.hospital_outpatient_payment)}`);
@@ -228,18 +288,19 @@ function renderEvidence(evidence) {
 
 function renderArtifact(artifact) {
   if (!artifact) {
-    detailContent.innerHTML = "<p>No artifact generated yet. Ask for help negotiating, disputing, or appealing a bill.</p>";
+    detailContent.innerHTML = "<p>No negotiation scripts generated yet. Ask for help negotiating or disputing a bill.</p>";
     return;
   }
   detailContent.innerHTML = `
     <div class="cards">
       <div class="card"><h3>Phone Script</h3><p>${escapeHtml(artifact.phone_script)}</p></div>
-      <div class="card"><h3>Email</h3><pre>${escapeHtml(artifact.email)}</pre></div>
+      <div class="card"><h3>Email Template</h3><pre>${escapeHtml(artifact.email)}</pre></div>
       <div class="card"><h3>Checklist</h3><pre>${escapeHtml(artifact.checklist)}</pre></div>
     </div>
   `;
 }
 
+/* ── Helpers ──────────────────────────────────────────── */
 function formatMoney(value) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
 }

@@ -4,59 +4,120 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Healthcare Price Advocate</title>
+    <meta name="description" content="AI-powered healthcare price transparency tool that helps you understand, compare, and negotiate medical bills.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
     <main class="app-shell">
       <section class="workspace">
         <aside class="sidebar" aria-label="Case summary">
-          <div>
-            <p class="eyebrow">MVP agent</p>
-            <h1>Healthcare Price Advocate</h1>
+          <div class="brand">
+            <div class="brand-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+              </svg>
+            </div>
+            <div>
+              <p class="eyebrow">AI-powered</p>
+              <h1>Price Advocate</h1>
+            </div>
           </div>
 
           <div class="panel">
-            <h2>Workflows</h2>
-            <button class="preset" data-prompt="I was quoted $2,200 for a knee MRI in Hoboken with Aetna. Is that fair?">Estimate review</button>
-            <button class="preset" data-prompt="Find me a cheaper place for a knee MRI near Hoboken with Aetna.">Find cheaper care</button>
-            <button class="preset" data-prompt="Help me negotiate a $2,200 knee MRI bill in Hoboken with Aetna.">Dispute script</button>
+            <h2>Quick Start</h2>
+            <p class="panel-hint">Try a sample scenario:</p>
+            <button class="preset" data-prompt="I was quoted $2,200 for a knee MRI in Hoboken with Aetna. Is that fair?">
+              <span class="preset-icon">📋</span>
+              <span class="preset-text">
+                <strong>Estimate Review</strong>
+                <small>Check if a quote is fair</small>
+              </span>
+            </button>
+            <button class="preset" data-prompt="Find me a cheaper place for a knee MRI near Hoboken with Aetna.">
+              <span class="preset-icon">🔍</span>
+              <span class="preset-text">
+                <strong>Find Cheaper Care</strong>
+                <small>Compare prices nearby</small>
+              </span>
+            </button>
+            <button class="preset" data-prompt="Help me negotiate a $2,200 knee MRI bill in Hoboken with Aetna.">
+              <span class="preset-icon">⚖️</span>
+              <span class="preset-text">
+                <strong>Dispute a Bill</strong>
+                <small>Get a negotiation script</small>
+              </span>
+            </button>
           </div>
 
           <div class="panel compact">
-            <h2>Current Case</h2>
+            <h2>Case Summary</h2>
             <dl id="caseFacts">
-              <div><dt>Type</dt><dd>Not started</dd></div>
-              <div><dt>Confidence</dt><dd>-</dd></div>
-              <div><dt>Missing</dt><dd>-</dd></div>
+              <div><dt>Status</dt><dd><span class="badge badge-neutral">Not started</span></dd></div>
+              <div><dt>Confidence</dt><dd>—</dd></div>
+              <div><dt>Missing</dt><dd>—</dd></div>
             </dl>
+          </div>
+
+          <div class="sidebar-footer">
+            <p>Data from CMS, hospital MRFs, and public pricing APIs. Not medical or legal advice.</p>
           </div>
         </aside>
 
         <section class="chat-region" aria-label="Chat">
           <div id="messages" class="messages">
-            <article class="message assistant">
-              <div class="bubble">
-                <p>Tell me about an estimate, bill, or procedure you want to shop for. Include the price, insurance plan, and location if you have them.</p>
+            <div class="welcome-hero">
+              <div class="welcome-icon">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
               </div>
-            </article>
+              <h2>Welcome to Price Advocate</h2>
+              <p>Tell me about a medical bill, estimate, or procedure you want to research. Include the price, insurance plan, and location if you have them.</p>
+              <div class="welcome-chips">
+                <button class="chip" data-prompt="How much does a knee MRI cost in NYC?">💰 MRI cost in NYC</button>
+                <button class="chip" data-prompt="I got a $600 bill for CPT 70551 in New York. Is that fair?">📄 Check a $600 MRI bill</button>
+                <button class="chip" data-prompt="What is the average cost of a colonoscopy?">🏥 Colonoscopy pricing</button>
+              </div>
+            </div>
           </div>
 
           <section id="details" class="details" aria-label="Agent details" hidden>
             <div class="tabs" role="tablist">
-              <button class="tab active" data-tab="comparison" type="button">Comparison</button>
-              <button class="tab" data-tab="artifact" type="button">Artifact</button>
-              <button class="tab" data-tab="trace" type="button">Tool Trace</button>
+              <button class="tab active" data-tab="comparison" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                Comparison
+              </button>
+              <button class="tab" data-tab="artifact" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Scripts
+              </button>
+              <button class="tab" data-tab="trace" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                Tool Trace
+              </button>
             </div>
             <div id="detailContent" class="detail-content"></div>
           </section>
 
           <form id="chatForm" class="composer">
-            <label class="file-button">
-              <span>Attach text</span>
+            <label class="file-button" title="Attach a text file">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+              </svg>
               <input id="fileInput" type="file" accept=".txt,text/plain">
             </label>
-            <textarea id="messageInput" rows="3" placeholder="Example: I was quoted $2,200 for CPT 73721 in Hoboken with Aetna."></textarea>
-            <button id="sendButton" type="submit">Send</button>
+            <div class="input-wrapper">
+              <textarea id="messageInput" rows="1" placeholder="Describe your bill, estimate, or question…"></textarea>
+            </div>
+            <button id="sendButton" type="submit" title="Send message">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+            </button>
           </form>
         </section>
       </section>
