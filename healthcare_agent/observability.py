@@ -72,20 +72,33 @@ def llm_span(
     """
     result: dict[str, Any] = {"output": ""}
     if LLMOBS_AVAILABLE:
-        with _LLMObs.llm(
-            model_name=model_name,
-            model_provider=model_provider,
-            name=name,
-        ) as span:
+        span = None
+        try:
+            span = _LLMObs.llm(
+                model_name=model_name,
+                model_provider=model_provider,
+                name=name,
+            )
+            span.__enter__()
             _LLMObs.annotate(
                 span=span,
                 input_data=[{"role": "user", "content": input_prompt}],
             )
+        except Exception:
+            span = None
+
+        try:
             yield result
-            _LLMObs.annotate(
-                span=span,
-                output_data=[{"role": "assistant", "content": str(result["output"])}],
-            )
+        finally:
+            if span is not None:
+                try:
+                    _LLMObs.annotate(
+                        span=span,
+                        output_data=[{"role": "assistant", "content": str(result["output"])}],
+                    )
+                    span.__exit__(None, None, None)
+                except Exception:
+                    pass
     else:
         yield result
 
@@ -93,4 +106,7 @@ def llm_span(
 def annotate_span(**kwargs: Any) -> None:
     """Annotate the currently-active span if LLMObs is available."""
     if LLMOBS_AVAILABLE:
-        _LLMObs.annotate(**kwargs)
+        try:
+            _LLMObs.annotate(**kwargs)
+        except Exception:
+            pass

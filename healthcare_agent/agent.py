@@ -46,10 +46,61 @@ class PatientAdvocateAgent:
         facts = extract_case_facts(message, case_type, classifier=self.classifier_service)
         trace.append(ToolTrace("extract_case_facts", {"message": message, "case_type": case_type}, facts.to_dict()))
 
+        # Merge conversation history context
+        history = self._cases.get(case_id, [])
+        if history:
+            last_response = history[-1]["response"]
+            last_facts = last_response.get("facts", {})
+            last_case_type = last_response.get("case_type", "general_inquiry")
+
+            # 1. Inherit case type if the new query is general_inquiry
+            if case_type == "general_inquiry" and last_case_type != "general_inquiry":
+                case_type = last_case_type
+                facts.case_type = case_type
+
+            # 2. Merge facts
+            if not facts.cpt_candidates and last_facts.get("cpt_candidates"):
+                facts.cpt_candidates = list(last_facts["cpt_candidates"])
+            if not facts.procedure_query and last_facts.get("procedure_query"):
+                facts.procedure_query = last_facts["procedure_query"]
+            if facts.amount is None and last_facts.get("amount") is not None:
+                facts.amount = last_facts["amount"]
+            if facts.payer is None and last_facts.get("payer"):
+                facts.payer = last_facts["payer"]
+            if facts.location is None and last_facts.get("location"):
+                facts.location = last_facts["location"]
+            if facts.setting is None and last_facts.get("setting"):
+                facts.setting = last_facts["setting"]
+
+            # 3. Recalculate missing list
+            missing = []
+            if not facts.cpt_candidates:
+                missing.append("procedure or CPT code")
+            if case_type in {"estimate_review", "find_cheaper_care"} and not facts.payer:
+                missing.append("insurance plan or cash-pay preference")
+            if not facts.location:
+                missing.append("location")
+            if case_type == "estimate_review" and facts.amount is None:
+                missing.append("quoted or billed amount")
+            facts.missing = missing
+
+            # 4. Recalculate confidence
+            score = sum([bool(facts.cpt_candidates), facts.payer is not None, facts.location is not None])
+            if case_type == "estimate_review":
+                score += facts.amount is not None
+            if score >= 4:
+                facts.confidence = "high"
+            elif score >= 2:
+                facts.confidence = "medium"
+            else:
+                facts.confidence = "low"
+
         rate = None
         care_options = []
         mrf_matches = []
         hospital_name = extract_hospital_name(message)
+        if not hospital_name and history:
+            hospital_name = history[-1]["response"].get("hospital_name")
         
         if facts.cpt_candidates:
             cpt = facts.cpt_candidates[0]
@@ -197,8 +248,14 @@ class PatientAdvocateAgent:
             "artifact": artifact,
             "tool_trace": [],
             "guardrails": guardrails,
+            "hospital_name": hospital_name,
         }
-        ai_explanation = self.ai_service.explain(response, fallback_answer=fallback_answer)
+        import inspect
+        sig = inspect.signature(self.ai_service.explain)
+        if "history" in sig.parameters:
+            ai_explanation = self.ai_service.explain(response, fallback_answer=fallback_answer, history=history)
+        else:
+            ai_explanation = self.ai_service.explain(response, fallback_answer=fallback_answer)
         response["answer"] = ai_explanation.answer or fallback_answer
         response["cards"]["ai_explanation"] = ai_explanation.to_dict()
         trace.append(

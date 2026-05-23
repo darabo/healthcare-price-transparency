@@ -92,11 +92,16 @@ class AiPatientExplainer:
     def enabled(self) -> bool:
         return self.client.enabled
 
-    def explain(self, case_payload: dict[str, Any], fallback_answer: str) -> AiExplanation:
+    def explain(
+        self,
+        case_payload: dict[str, Any],
+        fallback_answer: str,
+        history: list[dict[str, Any]] | None = None,
+    ) -> AiExplanation:
         if not self.enabled:
             return AiExplanation(status="not_configured", answer=fallback_answer, model=self.client.model)
 
-        prompt = _build_prompt(case_payload)
+        prompt = _build_prompt(case_payload, history)
         try:
             generated = self.client.generate_text(prompt)
         except AiServiceError as exc:
@@ -113,7 +118,7 @@ class AiPatientExplainer:
         return AiExplanation(status="success", answer=answer, model=self.client.model)
 
 
-def _build_prompt(case_payload: dict[str, Any]) -> str:
+def _build_prompt(case_payload: dict[str, Any], history: list[dict[str, Any]] | None = None) -> str:
     compact_payload = _compact_case_payload(case_payload)
     case_type = case_payload.get("case_type")
     
@@ -135,8 +140,19 @@ def _build_prompt(case_payload: dict[str, Any]) -> str:
     instructions += (
         "Mention that published rates are not a guarantee of final out-of-pocket cost. Keep the answer under 220 words.\n"
         "Return exactly one JSON object with this shape: {\"answer\":\"...\"}. Do not wrap it in markdown.\n\n"
-        f"Case JSON:\n{json.dumps(compact_payload, indent=2, sort_keys=True)}"
     )
+
+    if history:
+        instructions += "Conversation History:\n"
+        for turn in history:
+            user_msg = turn.get("message", "")
+            advocate_ans = turn.get("response", {}).get("answer", "")
+            instructions += f"User: {user_msg}\n"
+            instructions += f"Advocate: {advocate_ans}\n"
+        instructions += "\n"
+
+    instructions += f"Current User Query: {case_payload.get('facts', {}).get('raw_message', '')}\n\n"
+    instructions += f"Case JSON:\n{json.dumps(compact_payload, indent=2, sort_keys=True)}"
     return instructions
 
 

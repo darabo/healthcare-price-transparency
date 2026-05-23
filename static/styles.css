@@ -428,9 +428,9 @@ dd {
 }
 
 .detail-content {
-  max-height: 340px;
+  max-height: 170px;
   overflow: auto;
-  padding: 18px;
+  padding: 14px 18px;
 }
 
 /* ── Cards ─────────────────────────────────────────────── */

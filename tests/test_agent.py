@@ -61,6 +61,34 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(response["cards"]["ai_explanation"]["status"], "success")
         self.assertIn("ai_patient_explanation", [item["name"] for item in response["tool_trace"]])
 
+    def test_follow_up_conversation_resolves_context(self):
+        agent = PatientAdvocateAgent(ai_service=DisabledAiService())
+        case_id = "test-session-1"
+
+        # Turn 1: Quoted estimate for a knee MRI in Hoboken
+        res1 = agent.respond("I was quoted $2,200 for a knee MRI in Hoboken with Aetna. Is this fair?", case_id=case_id)
+        self.assertEqual(res1["case_type"], "estimate_review")
+        self.assertEqual(res1["facts"]["cpt_candidates"], ["73721"])
+        self.assertEqual(res1["facts"]["location"], "hoboken")
+        self.assertEqual(res1["facts"]["payer"], "aetna")
+
+        # Turn 2: Follow-up asking for cheaper provider (no code/location/payer mentioned)
+        res2 = agent.respond("Can you find a cheaper provider?", case_id=case_id)
+        self.assertEqual(res2["case_type"], "find_cheaper_care")
+        self.assertEqual(res2["facts"]["cpt_candidates"], ["73721"])
+        self.assertEqual(res2["facts"]["location"], "hoboken")
+        self.assertEqual(res2["facts"]["payer"], "aetna")
+        # Care options should be populated because the CPT was inherited
+        self.assertGreater(len(res2["cards"]["care_options"]), 0)
+
+        # Turn 3: Follow-up changing the payer (no code/location/intent mentioned)
+        res3 = agent.respond("What about for United?", case_id=case_id)
+        # Should carry over case_type find_cheaper_care and location/CPT, but update the payer to united
+        self.assertEqual(res3["case_type"], "find_cheaper_care")
+        self.assertEqual(res3["facts"]["cpt_candidates"], ["73721"])
+        self.assertEqual(res3["facts"]["location"], "hoboken")
+        self.assertEqual(res3["facts"]["payer"], "united")
+
 
 if __name__ == "__main__":
     unittest.main()
