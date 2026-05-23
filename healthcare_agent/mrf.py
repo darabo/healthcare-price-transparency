@@ -74,6 +74,8 @@ class ApiMrfService:
                 api_state = clean_state.upper()
                 
         if api_state:
+            if api_state == "NY":
+                return self._fetch_pra_rates(cpt, api_state, limit)
             import urllib.parse
             url += f"&state={urllib.parse.quote(api_state)}"
         if payer:
@@ -115,6 +117,92 @@ class ApiMrfService:
 
         return matches[:limit]
 
+    def _fetch_pra_rates(self, cpt: str, state: str, limit: int) -> list[MrfChargeMatch]:
+        import urllib.parse
+        import urllib.request
+        import json
+
+        matches = []
+        headers = {
+            "Reg": "d7b8caf30dbc",
+            "SessionId": "5087494111016062868872034",
+            "User-Agent": "Mozilla/5.0"
+        }
+
+        # 1. Fetch facilities for state
+        url = f"https://pnc.patientrightsadvocatefiles.org/facility/all?state={urllib.parse.quote(state)}"
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=15) as response:
+                facilities = json.loads(response.read().decode("utf-8"))
+        except Exception as e:
+            return [_status("PRA API", cpt, "error", f"Could not fetch facilities: {e}")]
+
+        if not facilities:
+            return [_status("PRA API", cpt, "not_found", f"No facilities found for state {state}")]
+
+        # Limit to 3 facilities to keep the agent fast
+        for fac in facilities[:3]:
+            fid = fac.get("id")
+            fac_name = fac.get("name")
+            if not fid:
+                continue
+
+            # 2. Search for the item code
+            item_url = f"https://pnc.patientrightsadvocatefiles.org/charge/itemsearch?fid={fid}&codesearch={urllib.parse.quote(cpt)}&search="
+            try:
+                req = urllib.request.Request(item_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    items = json.loads(response.read().decode("utf-8"))
+            except Exception:
+                continue
+
+            if not items or (isinstance(items, list) and len(items) > 0 and "error" in items[0]):
+                continue
+
+            # Just take the first matching item
+            iid = items[0].get("item_id")
+            if not iid:
+                continue
+
+            # 3. Fetch rates for the item
+            rate_url = f"https://pnc.patientrightsadvocatefiles.org/charge/find?fid={fid}&iid={iid}"
+            try:
+                req = urllib.request.Request(rate_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    rates = json.loads(response.read().decode("utf-8"))
+            except Exception:
+                continue
+
+            for rate in rates:
+                try:
+                    negotiated = float(rate.get("ppc_negotiated_charge", 0)) if rate.get("ppc_negotiated_charge") else None
+                except ValueError:
+                    negotiated = None
+
+                matches.append(
+                    MrfChargeMatch(
+                        source="PRA API",
+                        status="found",
+                        code=cpt,
+                        code_type=rate.get("item_code_type"),
+                        description=rate.get("item_description"),
+                        setting=rate.get("charge_setting"),
+                        hospital_name=fac_name,
+                        payer_name=rate.get("ppc_payer") or "unknown",
+                        plan_name=rate.get("ppc_plan"),
+                        negotiated_dollar=negotiated,
+                        methodology=rate.get("ppc_negotiated_methodology"),
+                        schema_reference="https://nychospitalpricefinder.patientrightsadvocate.org/"
+                    )
+                )
+                if len(matches) >= limit:
+                    return matches
+
+        if not matches:
+            return [_status("PRA API", cpt, "not_found", "No rates found in PRA API for these facilities.")]
+
+        return matches
 
 class MrfSourceService:
     def __init__(
