@@ -7,6 +7,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from healthcare_agent.config import get_env
+from healthcare_agent.observability import llm_span
 
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -42,37 +43,45 @@ class GeminiClient:
     def generate_text(self, prompt: str) -> str:
         if not self.enabled:
             raise AiServiceError("GOOGLE_AI_API_KEY is not configured")
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.2,
-                "topP": 0.8,
-                "maxOutputTokens": 8192,
-                "responseMimeType": "application/json",
-            },
-        }
-        request = Request(
-            f"{self.base_url}/models/{self.model}:generateContent",
-            data=json.dumps(payload).encode("utf-8"),
-            method="POST",
-            headers={
-                "Content-Type": "application/json",
-                "X-goog-api-key": self.api_key or "",
-            },
-        )
-        try:
-            with urlopen(request, timeout=45) as response:
-                response_payload = json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise AiServiceError(f"Gemini HTTP {exc.code}: {detail[:500]}") from exc
-        except URLError as exc:
-            raise AiServiceError(f"Gemini request failed: {exc.reason}") from exc
+        with llm_span(
+            model_name=self.model,
+            model_provider="google",
+            input_prompt=prompt,
+            name="gemini-generate",
+        ) as result:
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "temperature": 0.2,
+                    "topP": 0.8,
+                    "maxOutputTokens": 8192,
+                    "responseMimeType": "application/json",
+                },
+            }
+            request = Request(
+                f"{self.base_url}/models/{self.model}:generateContent",
+                data=json.dumps(payload).encode("utf-8"),
+                method="POST",
+                headers={
+                    "Content-Type": "application/json",
+                    "X-goog-api-key": self.api_key or "",
+                },
+            )
+            try:
+                with urlopen(request, timeout=45) as response:
+                    response_payload = json.loads(response.read().decode("utf-8"))
+            except HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                raise AiServiceError(f"Gemini HTTP {exc.code}: {detail[:500]}") from exc
+            except URLError as exc:
+                raise AiServiceError(f"Gemini request failed: {exc.reason}") from exc
 
-        try:
-            return response_payload["candidates"][0]["content"]["parts"][0]["text"].strip()
-        except (KeyError, IndexError, TypeError) as exc:
-            raise AiServiceError("Gemini response did not contain generated text") from exc
+            try:
+                text = response_payload["candidates"][0]["content"]["parts"][0]["text"].strip()
+            except (KeyError, IndexError, TypeError) as exc:
+                raise AiServiceError("Gemini response did not contain generated text") from exc
+            result["output"] = text
+            return text
 
 
 class AiPatientExplainer:

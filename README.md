@@ -1,126 +1,133 @@
-# Healthcare Price Transparency Agent MVP
+# Healthcare Price Transparency Agent
 
-A no-dependency local MVP for a chatbot-style patient advocate agent. It covers the first three workflows from the implementation plan:
+An AI-powered patient advocate chatbot that helps consumers understand, compare, and negotiate medical bills and procedure estimates. Users describe their situation in plain language — "I got a $2,200 bill for a knee MRI in New York with Aetna" — and the agent returns a structured, evidence-backed assessment with real pricing data, fairness analysis, and actionable negotiation tools.
 
-- Review whether an estimate or bill looks high.
-- Find lower-cost care options for a procedure.
-- Generate negotiation or dispute artifacts.
+## What It Does
 
-The app uses a small standard-library Python backend, a static chat UI, deterministic agent orchestration, and mock normalized price data. The tool contracts are shaped so a real price API such as Serif Health, HealthCorum, CMS benchmarks, or a ClickHouse-backed cache can replace the sample data later.
+- **Bill & Estimate Review** — Determines whether a quoted or billed amount is fair by comparing it against real negotiated rates from hospital machine-readable files, Medicare benchmarks, and public pricing databases.
+- **Price Comparison** — Finds lower-cost care options for the same procedure, showing what other facilities and payers are charging.
+- **Negotiation & Dispute Support** — Generates phone scripts, email templates, and step-by-step checklists to help patients challenge overcharges, backed by the benchmark data the agent already gathered.
+- **General Healthcare Pricing Questions** — Answers open-ended questions about procedure costs, insurance terminology, and billing practices using web-sourced evidence.
 
-## Configure Real Evidence Sources
+## How It Works
 
-Create a local `.env` file. Do not commit it.
+The agent uses a deterministic tool pipeline — not just an LLM — to gather and verify pricing data before generating a response. AI (Google Gemini) is used only as the final explanation layer; all pricing benchmarks, CPT mapping, fairness scoring, and guardrails are handled by structured, auditable tools.
+
+```
+User message
+  → Classify intent (bill review / find cheaper / negotiate / general)
+  → Extract facts (procedure, CPT code, amount, payer, location)
+  → Query pricing data sources:
+      • Medical Costs API — national Medicare benchmarks (free, no key)
+      • PRA API — real hospital negotiated rates for New York
+      • MedicalCosts API — negotiated rate lookups by CPT, state, payer
+      • CMS Open Data — hospital identification and quality ratings
+      • Nimble — rendered public-source web extraction (optional)
+      • ClickHouse — normalized MRF charge warehouse (optional)
+  → Compute fairness score (low / typical / high vs. benchmarks)
+  → Generate negotiation artifacts if the bill is actionable
+  → AI explanation — Gemini synthesizes all structured data into a
+    clear, patient-friendly response
+  → Return structured JSON with cards, evidence, and guardrails
+```
+
+## Data Sources
+
+| Source | Coverage | Key Required? |
+|--------|----------|---------------|
+| [Medical Costs API](https://medical-costs-api.david-568.workers.dev) | National Medicare procedure benchmarks & negotiated rates by state | No |
+| [PRA / NYC Hospital Price Finder](https://nychospitalpricefinder.patientrightsadvocate.org/) | Real negotiated rates from NY hospital MRFs (all payers) | No |
+| [CMS Provider Data Catalog](https://data.cms.gov) | Hospital identification, quality ratings, general info | No |
+| [Google Gemini](https://ai.google.dev) | AI-generated patient explanations | Yes |
+| [Nimble](https://nimbledata.com) | Rendered web extraction for hospital pricing pages | Yes (optional) |
+| ClickHouse | Self-hosted warehouse for parsed MRF charge rows | Self-hosted |
+
+## Quick Start
+
+### 1. Clone and configure
 
 ```bash
+git clone <repo-url>
+cd healthcare-price-transparency
 cp .env.example .env
 ```
 
-Set:
+Edit `.env` and set at minimum:
 
 ```text
-NIMBLE_API_KEY=your_nimble_key_here
 GEMINI_API_KEY=your_gemini_key_here
 ```
 
-Nimble is used for rendered public-source extraction and discovery against:
-
-- `hospitalpricingfiles.org`
-- CMS Hospital Price Transparency pages
-
-CMS open hospital data is used without a key via the Provider Data Catalog `Hospital General Information` dataset (`xubh-q36u`) to identify likely hospital/facility matches.
-
-Google AI Studio/Gemini is used for the patient-facing explanation. The app still computes CPT candidates, benchmarks, CMS evidence, MRF matches, and guardrails with deterministic tools first; Gemini receives those structured facts and turns them into a concise billing explanation.
-
-National Medicare procedure benchmarks are pulled dynamically and for free using the Medical Costs API (`https://medical-costs-api.david-568.workers.dev`). No API key is required.
-
-### Hospital MRF Parsing
-
-The app can now parse CMS-template hospital machine-readable files directly from local paths or direct file URLs. The parser is based on the CMS Hospital Price Transparency GitHub technical guide, which documents CSV tall, CSV wide, and JSON templates:
-
-- `https://github.com/CMSgov/hospital-price-transparency`
-
-Configure one or more sources:
-
-```text
-HOSPITAL_MRF_SOURCES=/path/to/hospital-mrf.csv,https://example.org/hospital-mrf.json
-HOSPITAL_MRF_MAX_BYTES=52428800
-```
-
-Nimble should be used to discover or render pages that link to MRFs. The app then downloads and parses direct CSV/JSON files locally, because real MRFs can be large and should not be treated as ordinary web-page scraping output.
-
-Current parser coverage:
-
-- CMS-style CSV tall rows with `payer_name`, `plan_name`, and `standard_charge | negotiated_dollar`.
-- CMS-style CSV wide columns such as `standard_charge | Aetna | Open Access | negotiated_dollar`.
-- CMS-style JSON rows with nested billing-code and standard-charge objects.
-- `.gz` and `.zip` containers when they contain a CSV or JSON file.
-- CPT/HCPCS matching, payer filtering, and extraction of gross, cash, negotiated, median, 10th, and 90th percentile amounts where present.
-
-### ClickHouse
-
-ClickHouse is useful as the normalized analytics store for parsed MRF rows. It should not replace Nimble; use Nimble to discover hospital MRF links, parse those direct files locally, then load normalized charge rows into ClickHouse for fast CPT/payer/facility queries.
-
-Configure the database HTTP endpoint:
-
-```text
-CLICKHOUSE_URL=https://your-clickhouse-host:8443
-CLICKHOUSE_USER=default
-CLICKHOUSE_PASSWORD=your_database_password
-CLICKHOUSE_DATABASE=healthcare
-CLICKHOUSE_MRF_TABLE=mrf_charges
-```
-
-If ClickHouse is configured, the agent checks it first for `hospital_mrf_parse` matches. To load rows from a direct MRF file or URL:
-
-```bash
-python3 scripts/ingest_mrf_to_clickhouse.py /path/to/hospital-mrf.csv --cpt 73721 --payer Aetna
-```
-
-The attached ClickHouse Cloud API key ID/secret can be stored as `CLICKHOUSE_CLOUD_API_KEY_ID` and `CLICKHOUSE_CLOUD_API_KEY_SECRET`, but those management API credentials are not sufficient by themselves for SQL queries. The app still needs `CLICKHOUSE_URL`, `CLICKHOUSE_USER`, and `CLICKHOUSE_PASSWORD`.
-
-## Run
+### 2. Run
 
 ```bash
 python3 app.py
 ```
 
-Then open:
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
 
-```text
-http://127.0.0.1:8000
-```
+### 3. Try it
 
-## Test
+Type something like:
+
+> I was quoted $2,200 for a knee MRI (CPT 73721) in New York with Aetna. Is that fair?
+
+The agent will return a fairness assessment, benchmark comparisons, real negotiated rates from NY hospitals, and — if the price looks high — a generated negotiation script.
+
+## Configuration
+
+### Required
+
+| Variable | Purpose |
+|----------|---------|
+| `GEMINI_API_KEY` | Google AI Studio API key for patient-facing AI explanations |
+
+### Optional
+
+| Variable | Purpose |
+|----------|---------|
+| `NIMBLE_API_KEY` | Nimble rendered web extraction for hospital pricing pages |
+| `HOSPITAL_MRF_SOURCES` | Comma-separated local paths or URLs to hospital MRF CSV/JSON files |
+| `HOSPITAL_MRF_MAX_BYTES` | Max bytes to download per MRF file (default: 50 MB) |
+| `CLICKHOUSE_URL` | ClickHouse HTTP endpoint for normalized MRF charge queries |
+| `CLICKHOUSE_USER` | ClickHouse username |
+| `CLICKHOUSE_PASSWORD` | ClickHouse password |
+| `CLICKHOUSE_DATABASE` | ClickHouse database name |
+| `CLICKHOUSE_MRF_TABLE` | ClickHouse table name for MRF charge rows |
+
+### Loading MRF data into ClickHouse
 
 ```bash
-python3 -m unittest discover -s tests
+python3 scripts/ingest_mrf_to_clickhouse.py /path/to/hospital-mrf.csv --cpt 73721 --payer Aetna
 ```
 
-## MVP Architecture
+### LLM Observability with Datadog Lapdog
 
-```text
-Static chat UI
-  -> /api/chat
-  -> Agent orchestrator
-  -> Tools:
-       classify_case_type
-       procedure_lookup
-       rate_distribution_lookup
-       find_care_options
-       source_verify
-       cms_open_hospital_lookup
-       cms_ppl_lookup
-       public_evidence_lookup
-       hospital_mrf_parse
-       ai_patient_explanation
-       generate_advocacy_artifact
-  -> structured response + next-step artifact
+The agent is instrumented with [Datadog Lapdog](https://docs.datadoghq.com/llm_observability/lapdog/) for local LLM observability — **no Datadog account required**. Every agent run, tool call, and Gemini LLM invocation is emitted as a structured span you can inspect in a browser dashboard.
+
+**Install Lapdog:**
+
+```bash
+# macOS (Homebrew)
+brew install datadog/lapdog/lapdog
+
+# Or via pip (any OS)
+pip install ddtrace
 ```
+
+**Run with Lapdog:**
+
+```bash
+lapdog python app.py
+```
+
+Then open [lapdog.datadoghq.com](https://lapdog.datadoghq.com) to see a real-time trace of every agent session — including the full Gemini prompt/response, tool execution order, and latency breakdown.
+
+If Lapdog / `ddtrace` is not installed, the instrumentation is a complete no-op and the app runs exactly as before.
 
 ## API
 
-`POST /api/chat`
+### `POST /api/chat`
 
 ```json
 {
@@ -129,16 +136,52 @@ Static chat UI
 }
 ```
 
-Returns a structured agent response with:
+**Response** includes:
 
-- `answer`: patient-facing explanation.
-- `case_type`: classified workflow.
-- `facts`: extracted procedure, amount, payer, location, and CPT candidates.
-- `tool_trace`: tools called and compact outputs.
-- `cards`: comparison and care-option cards.
-- `artifact`: negotiation or dispute script when relevant.
-- `guardrails`: safety and price-certainty caveats.
+| Field | Description |
+|-------|-------------|
+| `answer` | AI-generated patient-facing explanation |
+| `case_type` | Classified workflow (`estimate_review`, `find_cheaper_care`, `negotiate_or_dispute`, `general_inquiry`) |
+| `facts` | Extracted procedure, amount, payer, location, and CPT candidates |
+| `cards` | Structured data cards: fairness score, rate distribution, care options, CMS benchmarks, hospital matches, MRF negotiated rates |
+| `artifact` | Negotiation phone script, email template, and checklist (when applicable) |
+| `tool_trace` | Full audit trail of every tool invoked and its output |
+| `guardrails` | Safety and price-certainty caveats |
 
-## Notes
+## Architecture
 
-This MVP does not process real PHI securely and should not be deployed with real patient data as-is. It deliberately keeps document upload to client-side text extraction for `.txt` files and pasted bill text. Production deployment needs authentication, audit logging, secure storage, data licensing, and a real normalized price API.
+```
+healthcare-price-transparency/
+├── app.py                          # Zero-dependency HTTP server (stdlib only)
+├── static/                         # Chat UI (HTML/CSS/JS)
+│   ├── index.html
+│   ├── styles.css
+│   └── app.js
+├── healthcare_agent/
+│   ├── agent.py                    # Orchestrator — sequences tools and composes response
+│   ├── tools.py                    # Deterministic tools: CPT lookup, fairness, care options
+│   ├── mrf.py                      # MRF data layer: Medical Costs API + PRA API
+│   ├── external.py                 # CMS, Nimble, and web evidence services
+│   ├── ai.py                       # Gemini integration for AI explanations
+│   ├── models.py                   # Shared data models
+│   ├── observability.py             # Lapdog / LLM Observability integration (no-op without ddtrace)
+│   ├── sample_data.py              # Fallback sample benchmarks
+│   ├── clickhouse_store.py         # ClickHouse charge warehouse client
+│   ├── cache.py                    # Response caching
+│   └── config.py                   # Environment variable loader
+├── scripts/                        # CLI utilities (MRF ingestion, etc.)
+├── tests/                          # Unit tests
+└── docs/                           # Documentation and handoff notes
+```
+
+## Tests
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+## Disclaimer
+
+This application provides price-navigation support, **not medical or legal advice**. Published or sampled rates are not a guarantee of final out-of-pocket cost. Always verify CPT/HCPCS codes, network status, prior authorization, and all billing entities with your provider and insurer before acting.
+
+This MVP does not process real PHI securely and should not be deployed with real patient data as-is. Production deployment requires authentication, audit logging, secure storage, data licensing, and compliance review.

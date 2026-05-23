@@ -7,6 +7,7 @@ from healthcare_agent.ai import AiPatientExplainer, AiProcedureClassifier
 from healthcare_agent.external import PublicEvidenceService
 from healthcare_agent.models import RateDistribution, ToolTrace
 from healthcare_agent.mrf import MrfSourceService
+from healthcare_agent.observability import annotate_span, trace_agent, trace_tool
 from healthcare_agent.tools import (
     classify_case_type,
     extract_case_facts,
@@ -33,9 +34,11 @@ class PatientAdvocateAgent:
         self.ai_service = ai_service or AiPatientExplainer()
         self.classifier_service = classifier_service or AiProcedureClassifier()
 
+    @trace_agent(name="patient-advocate-agent")
     def respond(self, message: str, case_id: str | None = None) -> dict[str, Any]:
         case_id = case_id or str(uuid.uuid4())
         trace: list[ToolTrace] = []
+        annotate_span(input_data=message, tags={"case_id": case_id})
 
         case_type = classify_case_type(message)
         trace.append(ToolTrace("classify_case_type", {"message": message}, {"case_type": case_type}))
@@ -207,6 +210,14 @@ class PatientAdvocateAgent:
         )
         response["tool_trace"] = [item.to_dict() for item in trace]
         self._cases.setdefault(case_id, []).append({"message": message, "response": response})
+        annotate_span(
+            output_data=response["answer"],
+            metadata={
+                "case_type": case_type,
+                "cpt": facts.cpt_candidates[0] if facts.cpt_candidates else None,
+                "tool_count": len(trace),
+            },
+        )
         return response
 
     def _compose_answer(
