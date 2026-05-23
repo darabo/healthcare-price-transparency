@@ -162,80 +162,72 @@ class NimbleClient:
             raise ExternalServiceError(f"Nimble request failed: {exc.reason}") from exc
 
 
-class CmsPplClient:
-    def __init__(self, api_key: str | None = None, base_url: str | None = None, cache: ResponseCache | None = None) -> None:
-        self.api_key = api_key or get_env("CMS_PPL_API_KEY")
-        self.base_url = (base_url or get_env("CMS_PPL_BASE_URL") or "").rstrip("/")
+class MedicalCostsApiClient:
+    def __init__(self, cache: ResponseCache | None = None) -> None:
+        self.base_url = "https://medical-costs-api.david-568.workers.dev/api"
         self.cache = cache or ResponseCache()
 
     @property
     def enabled(self) -> bool:
-        return bool(self.api_key and self.base_url)
+        return True
 
     def lookup(self, cpt: str) -> CmsBenchmark:
-        if not self.enabled:
-            return CmsBenchmark(
-                code=cpt,
-                source="CMS Procedure Price Lookup API",
-                status="not_configured",
-                message="Set CMS_PPL_API_KEY and CMS_PPL_BASE_URL after accepting the CMS/AMA terms.",
-            )
-
-        params = {"q": cpt}
-        cache_key = {"base_url": self.base_url, "params": params}
-        cached = self.cache.get("cms_ppl", cache_key, ttl_seconds=60 * 60 * 24 * 7)
+        cache_key = {"base_url": self.base_url, "cpt": cpt}
+        cached = self.cache.get("medical_costs_api", cache_key, ttl_seconds=60 * 60 * 24 * 7)
         if cached:
             return self._normalize(cpt, cached)
 
         request = Request(
-            f"{self.base_url}?{urlencode(params)}",
+            f"{self.base_url}/procedures/{cpt}",
             method="GET",
-            headers={"x-api-key": self.api_key or "", "Accept": "application/json"},
+            headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
         )
         try:
             with urlopen(request, timeout=30) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
+            if exc.code == 404:
+                return CmsBenchmark(
+                    code=cpt,
+                    source="Medical Costs API",
+                    status="not_found",
+                    raw=None
+                )
             return CmsBenchmark(
                 code=cpt,
-                source="CMS Procedure Price Lookup API",
+                source="Medical Costs API",
                 status="error",
-                message=f"CMS PPL HTTP {exc.code}: {exc.read().decode('utf-8', errors='replace')[:300]}",
+                message=f"API HTTP {exc.code}: {exc.read().decode('utf-8', errors='replace')[:300]}",
             )
         except URLError as exc:
             return CmsBenchmark(
                 code=cpt,
-                source="CMS Procedure Price Lookup API",
+                source="Medical Costs API",
                 status="error",
-                message=f"CMS PPL request failed: {exc.reason}",
+                message=f"API request failed: {exc.reason}",
             )
-        self.cache.set("cms_ppl", cache_key, payload)
+        self.cache.set("medical_costs_api", cache_key, payload)
         return self._normalize(cpt, payload)
 
     def _normalize(self, cpt: str, payload: dict[str, Any]) -> CmsBenchmark:
-        rows = payload.get("data") if isinstance(payload, dict) else None
-        if isinstance(rows, dict):
-            rows = [rows]
-        if not isinstance(rows, list):
-            rows = payload.get("results") if isinstance(payload, dict) else []
-        if not rows:
+        if not payload.get("success") or not payload.get("data"):
             return CmsBenchmark(
                 code=cpt,
-                source="CMS Procedure Price Lookup API",
+                source="Medical Costs API",
                 status="not_found",
-                raw=payload if isinstance(payload, dict) else None,
+                raw=payload
             )
 
-        row = rows[0]
+        data = payload["data"]
         return CmsBenchmark(
             code=cpt,
-            source="CMS Procedure Price Lookup API",
+            source="Medical Costs API",
             status="found",
-            title=_first_present(row, ["procedure", "description", "name", "title"]),
-            hospital_outpatient_payment=_first_money(row, ["hopd_payment", "hospital_outpatient_payment", "national_payment"]),
-            ambulatory_surgical_center_payment=_first_money(row, ["asc_payment", "ambulatory_surgical_center_payment"]),
-            beneficiary_copay=_first_money(row, ["copay", "beneficiary_copay", "patient_copay"]),
-            raw=row,
+            title=data.get("description"),
+            hospital_outpatient_payment=data.get("hospitalOutpatientCost") or data.get("nationalFacilityRate"),
+            ambulatory_surgical_center_payment=data.get("ascCost"),
+            beneficiary_copay=data.get("hospitalOutpatientCopay") or data.get("ascCopay"),
+            raw=data,
         )
 
 
@@ -318,18 +310,43 @@ class PublicEvidenceService:
     def __init__(
         self,
         nimble: NimbleClient | None = None,
-        cms: CmsPplClient | None = None,
+        medical_costs: MedicalCostsApiClient | None = None,
         cms_open_data: CmsOpenDataClient | None = None,
     ) -> None:
         self.nimble = nimble or NimbleClient()
-        self.cms = cms or CmsPplClient()
+        self.medical_costs = medical_costs or MedicalCostsApiClient()
         self.cms_open_data = cms_open_data or CmsOpenDataClient()
 
-    def cms_ppl_lookup(self, cpt: str) -> CmsBenchmark:
-        return self.cms.lookup(cpt)
+    def medical_costs_api_lookup(self, cpt: str) -> CmsBenchmark:
+        return self.medical_costs.lookup(cpt)
 
     def cms_open_hospital_lookup(self, hospital_name: str | None, location: str | None) -> list[HospitalInfo]:
         return self.cms_open_data.search_hospitals(hospital_name=hospital_name, location=location)
+
+    def general_web_search(self, query: str) -> list[WebEvidence]:
+        if not self.nimble.enabled:
+            return []
+        try:
+            payload = self.nimble.search(query, max_results=3)
+        except ExternalServiceError as exc:
+            return [_error_evidence("Nimble Search", "N/A", str(exc))]
+        
+        results = payload.get("results", []) if isinstance(payload, dict) else []
+        evidence = []
+        for result in results[:3]:
+            url = result.get("url") or "N/A"
+            content = " ".join(str(result.get(field, "")) for field in ["title", "description", "content"])
+            evidence.append(
+                WebEvidence(
+                    source="Nimble Search",
+                    url=url,
+                    status="success",
+                    title=str(result.get("title") or "Web Search Result")[:100],
+                    summary=content[:500],
+                    matches=[],
+                )
+            )
+        return evidence
 
     def discover_hospital_price_files(self, hospital_name: str | None, location: str | None, cpt: str | None) -> list[WebEvidence]:
         if not self.nimble.enabled:
@@ -377,44 +394,7 @@ class PublicEvidenceService:
             )
         ]
 
-    def discover_mrf_links(self, hospital_name: str | None, location: str | None) -> list[str]:
-        if not self.nimble.enabled:
-            return []
-        
-        query_parts = [part for part in [hospital_name, location] if part]
-        query = " ".join(query_parts)
-        if not query:
-            return []
-            
-        urls = []
-        try:
-            payload = self.nimble.run_agent(
-                agent_id="hospitalpricingfiles_mrf_links_2026_05_23_ef2glucl",
-                params={"search_query": query}
-            )
-            urls = _extract_urls_from_agent_response(payload)
-        except ExternalServiceError:
-            pass
 
-        if urls:
-            return urls
-            
-        # Fallback: Web search on hospitalpricingfiles.org
-        search_query = f"{query} hospital price transparency file"
-        try:
-            payload = self.nimble.search(search_query, include_domains=["hospitalpricingfiles.org"], max_results=3)
-            results = payload.get("results", []) if isinstance(payload, dict) else []
-            for result in results:
-                content = " ".join(str(result.get(field, "")) for field in ["title", "description", "content", "url"])
-                matches = re.findall(r'https?://[^\s<>"\']+?\.(?:json|csv|zip)(?:\?[^\s<>"\']+)?', content)
-                urls.extend(matches)
-                matches2 = re.findall(r'https?://(?:www\.)?hospitalpricingfiles\.org/[^\s<>"\']+', content)
-                urls.extend(matches2)
-                
-            seen = set()
-            return [u for u in urls if not (u in seen or seen.add(u))]
-        except ExternalServiceError:
-            return []
 
     def extract_public_context(self, cpt: str | None = None) -> list[WebEvidence]:
         evidence = []

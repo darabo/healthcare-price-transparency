@@ -11,8 +11,8 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class NoExternalEvidenceService:
-    def cms_ppl_lookup(self, cpt):
-        return CmsBenchmark(code=cpt, source="CMS Procedure Price Lookup API", status="not_configured")
+    def medical_costs_api_lookup(self, cpt):
+        return CmsBenchmark(code=cpt, source="Medical Costs API", status="not_configured")
 
     def cms_open_hospital_lookup(self, hospital_name, location):
         return [

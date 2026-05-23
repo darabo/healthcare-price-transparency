@@ -19,9 +19,8 @@ cp .env.example .env
 Set:
 
 ```text
-NIMBLE_API_KEY=your_key_here
-GOOGLE_AI_API_KEY=your_google_ai_studio_key_here
-GEMINI_MODEL=gemini-2.5-flash
+NIMBLE_API_KEY=your_nimble_key_here
+GEMINI_API_KEY=your_gemini_key_here
 ```
 
 Nimble is used for rendered public-source extraction and discovery against:
@@ -33,12 +32,7 @@ CMS open hospital data is used without a key via the Provider Data Catalog `Hosp
 
 Google AI Studio/Gemini is used for the patient-facing explanation. The app still computes CPT candidates, benchmarks, CMS evidence, MRF matches, and guardrails with deterministic tools first; Gemini receives those structured facts and turns them into a concise billing explanation.
 
-CMS Procedure Price Lookup is also wired, but CMS API access requires CMS credentials and AMA terms acceptance. After you have the endpoint and key, set:
-
-```text
-CMS_PPL_API_KEY=your_cms_key_here
-CMS_PPL_BASE_URL=your_cms_ppl_cost_search_endpoint
-```
+National Medicare procedure benchmarks are pulled dynamically and for free using the Medical Costs API (`https://medical-costs-api.david-568.workers.dev`). No API key is required.
 
 ### Hospital MRF Parsing
 

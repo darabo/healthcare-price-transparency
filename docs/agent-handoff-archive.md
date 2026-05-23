@@ -64,8 +64,6 @@ Not yet configured:
 - `CLICKHOUSE_URL`
 - `CLICKHOUSE_USER`
 - `CLICKHOUSE_PASSWORD`
-- `CMS_PPL_API_KEY`
-- `CMS_PPL_BASE_URL`
 - `HOSPITAL_MRF_SOURCES`
 
 Important: the ClickHouse Cloud API key ID/secret are management API credentials. They are not enough for SQL queries. The app still needs the ClickHouse database HTTP endpoint and database user/password.
@@ -84,7 +82,7 @@ Static chat UI
        find_care_options
        source_verify
        cms_open_hospital_lookup
-       cms_ppl_lookup
+       medical_costs_api_lookup
        public_evidence_lookup
        hospital_mrf_parse
        generate_advocacy_artifact
@@ -100,7 +98,7 @@ Core files:
 - `healthcare_agent/agent.py`: orchestrates all tools and AI response generation.
 - `healthcare_agent/ai.py`: Gemini API client and patient-facing explanation prompt.
 - `healthcare_agent/tools.py`: deterministic classification, CPT mapping, fact extraction, benchmark lookup, care options, artifact generation.
-- `healthcare_agent/external.py`: Nimble, CMS Procedure Price Lookup placeholder, CMS open hospital data, public evidence extraction.
+- `healthcare_agent/external.py`: Nimble, Medical Costs API, CMS open hospital data, public evidence extraction.
 - `healthcare_agent/mrf.py`: CMS-template hospital machine-readable file parser.
 - `healthcare_agent/clickhouse_store.py`: optional ClickHouse HTTP client/store for normalized MRF rows.
 - `scripts/ingest_mrf_to_clickhouse.py`: parse MRF rows for a CPT/payer and load them into ClickHouse.
@@ -203,18 +201,12 @@ Purpose:
 - Basic hospital information
 - Not pricing
 
-### CMS Procedure Price Lookup
+### Medical Costs API
 
-Wired but not configured.
+Used for national Medicare procedure benchmarks. Replaces the old CMS Procedure Price Lookup.
 
-Requires:
-
-```text
-CMS_PPL_API_KEY
-CMS_PPL_BASE_URL
-```
-
-Do not scrape or bypass CMS/AMA access restrictions.
+- Base URL: `https://medical-costs-api.david-568.workers.dev`
+- No API key required.
 
 ### CMS Hospital Price Transparency GitHub
 
@@ -296,7 +288,7 @@ Cards include:
 - Fairness
 - AI Explanation
 - Benchmark
-- CMS PPL
+- Medical Costs
 - CMS Hospital Data
 - Hospital MRF
 - Care Options
@@ -367,7 +359,7 @@ OK
 
 - AI explains, tools decide. Gemini is not trusted as the pricing source of truth.
 - Nimble discovers/renders webpages, local parser handles MRF files.
-- CMS PPL is wired but not scraped because of API/AMA access constraints.
+- Medical Costs API provides free, open-access national Medicare benchmarks.
 - ClickHouse is optional but fits the long-term normalized MRF query layer.
 - Secrets are stored only in local `.env`; never commit them.
 - The app remains no-dependency Python stdlib for now.

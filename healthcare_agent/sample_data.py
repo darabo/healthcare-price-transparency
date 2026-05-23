@@ -38,6 +38,7 @@ RATE_DISTRIBUTIONS: list[RateDistribution] = [
     RateDistribution("72148", "aetna", "hoboken", 570, 840, 1325, 375, 780, 102, "sample normalized commercial rates"),
     RateDistribution("45378", "aetna", "hoboken", 1050, 1650, 2600, 850, 1900, 77, "sample normalized commercial rates"),
     RateDistribution("99284", "aetna", "hoboken", 950, 1500, 2400, 700, 1700, 66, "sample normalized commercial rates"),
+    RateDistribution("71046", "cash", "new york", 50, 110, 250, 45, 100, 310, "sample normalized cash rates"),
 ]
 
 

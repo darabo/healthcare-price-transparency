@@ -10,7 +10,7 @@ from healthcare_agent.config import get_env
 
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
-DEFAULT_MODEL = "gemini-3.5-flash"
+DEFAULT_MODEL = "gemini-2.5-flash"
 
 
 @dataclass
@@ -47,7 +47,7 @@ class GeminiClient:
             "generationConfig": {
                 "temperature": 0.2,
                 "topP": 0.8,
-                "maxOutputTokens": 1200,
+                "maxOutputTokens": 8192,
                 "responseMimeType": "application/json",
             },
         }
@@ -106,15 +106,29 @@ class AiPatientExplainer:
 
 def _build_prompt(case_payload: dict[str, Any]) -> str:
     compact_payload = _compact_case_payload(case_payload)
-    return (
+    case_type = case_payload.get("case_type")
+    
+    instructions = (
         "You are a patient billing advocate for a healthcare price transparency MVP.\n"
         "Use only the JSON facts below. Do not invent CPT codes, providers, prices, payer names, legal claims, or medical advice.\n"
-        "Explain the likely CPT code in plain English, say whether the quoted/billed amount looks high/fair/low based on the benchmark, "
-        "and give concrete next steps for verifying the bill or estimate. If evidence is missing, say exactly what is missing.\n"
+    )
+    if case_type == "general_inquiry":
+        instructions += (
+            "The user asked a general question. Answer their question directly using the provided public_evidence or facts. "
+            "If they asked about a price, synthesize a realistic estimate range from the evidence.\n"
+        )
+    else:
+        instructions += (
+            "Explain the likely CPT code in plain English. If you have public evidence or search results, use them to estimate whether the quoted/billed amount looks high/fair/low even if the exact CPT code is missing. "
+            "Give concrete next steps for verifying the bill or estimate. If no evidence or benchmarks are available to evaluate the price, say exactly what is missing.\n"
+        )
+        
+    instructions += (
         "Mention that published rates are not a guarantee of final out-of-pocket cost. Keep the answer under 220 words.\n"
         "Return exactly one JSON object with this shape: {\"answer\":\"...\"}. Do not wrap it in markdown.\n\n"
         f"Case JSON:\n{json.dumps(compact_payload, indent=2, sort_keys=True)}"
     )
+    return instructions
 
 
 def _compact_case_payload(case_payload: dict[str, Any]) -> dict[str, Any]:
@@ -155,7 +169,7 @@ def _extract_answer(generated: str) -> str:
 
 def _looks_complete(answer: str) -> bool:
     text = answer.strip()
-    if len(text) < 80:
+    if len(text) < 15:
         return False
     if text.endswith((".", "!", "?")):
         return True
@@ -181,9 +195,9 @@ class AiProcedureClassifier:
             return None
 
         prompt = (
-            "You are a medical coding expert. Map the following procedure description to the most likely CPT or HCPCS code.\n"
-            "Return EXACTLY one JSON object with this shape: {\"code\": \"12345\", \"label\": \"Procedure name\"}.\n"
-            "Do not include markdown formatting or any other text. If you cannot determine a code, return an empty JSON object {}.\n\n"
+            "You are a medical coding expert. Extract the medical procedure name from the query and map it to the most likely CPT or HCPCS code.\n"
+            "Return EXACTLY one JSON object with this shape: {\"procedure\": \"extracted procedure name\", \"code\": \"12345\"}.\n"
+            "If you cannot determine a code, leave code as null but still return the procedure name.\n\n"
             f"Procedure query: {procedure_query}"
         )
 
@@ -192,17 +206,15 @@ class AiProcedureClassifier:
             answer = _extract_answer(generated)
             if not answer:
                  return None
-            # _extract_answer already tries to parse json if there are backticks, but let's parse it directly.
             try:
                 data = json.loads(answer)
-                if isinstance(data, dict) and "code" in data and "label" in data:
-                    return {"code": str(data["code"]), "label": str(data["label"])}
+                if isinstance(data, dict) and "procedure" in data:
+                    return {"code": str(data.get("code") or ""), "label": str(data["procedure"])}
             except json.JSONDecodeError:
-                # If _extract_answer returned the raw string that wasn't backticked, let's try to parse it
                 try:
                     data = json.loads(generated.strip())
-                    if isinstance(data, dict) and "code" in data and "label" in data:
-                        return {"code": str(data["code"]), "label": str(data["label"])}
+                    if isinstance(data, dict) and "procedure" in data:
+                        return {"code": str(data.get("code") or ""), "label": str(data["procedure"])}
                 except json.JSONDecodeError:
                     pass
             return None

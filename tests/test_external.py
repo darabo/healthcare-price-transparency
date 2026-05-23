@@ -6,7 +6,7 @@ from tests.fakes import DisabledAiService
 
 
 class FakeEvidenceService:
-    def cms_ppl_lookup(self, cpt):
+    def medical_costs_api_lookup(self, cpt):
         return CmsBenchmark(
             code=cpt,
             source="CMS Procedure Price Lookup API",

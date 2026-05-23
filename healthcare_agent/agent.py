@@ -59,21 +59,7 @@ class PatientAdvocateAgent:
                 )
             )
 
-            mrf_links = self.evidence_service.discover_mrf_links(
-                hospital_name=hospital_name,
-                location=facts.location,
-            )
-            if mrf_links:
-                trace.append(
-                    ToolTrace(
-                        "discover_mrf_links",
-                        {"hospital_name": hospital_name, "location": facts.location},
-                        {"urls": mrf_links},
-                    )
-                )
-                self.mrf_service.sources.extend(mrf_links)
-
-            mrf_matches = self.mrf_service.find_charges(cpt=cpt, payer=facts.payer)
+            mrf_matches = self.mrf_service.find_charges(cpt=cpt, payer=facts.payer, state=facts.location)
             trace.append(
                 ToolTrace(
                     "hospital_mrf_parse",
@@ -120,6 +106,16 @@ class PatientAdvocateAgent:
         cms_benchmark = None
         cms_hospitals = []
         public_evidence = []
+        if case_type == "general_inquiry":
+            general_results = self.evidence_service.general_web_search(message)
+            public_evidence.extend(general_results)
+            trace.append(
+                ToolTrace(
+                    "general_web_search",
+                    {"query": message},
+                    {"items": [item.to_dict() for item in general_results]},
+                )
+            )
         cms_hospitals = self.evidence_service.cms_open_hospital_lookup(hospital_name, facts.location)
         trace.append(
             ToolTrace(
@@ -130,10 +126,10 @@ class PatientAdvocateAgent:
         )
         if facts.cpt_candidates:
             cpt = facts.cpt_candidates[0]
-            cms_benchmark = self.evidence_service.cms_ppl_lookup(cpt)
+            cms_benchmark = self.evidence_service.medical_costs_api_lookup(cpt)
             trace.append(
                 ToolTrace(
-                    "cms_ppl_lookup",
+                    "medical_costs_api_lookup",
                     {"cpt": cpt},
                     cms_benchmark.to_dict(),
                 )
@@ -149,6 +145,20 @@ class PatientAdvocateAgent:
                     "public_evidence_lookup",
                     {"hospital_name": hospital_name, "location": facts.location, "cpt": cpt},
                     {"items": [item.to_dict() for item in public_evidence]},
+                )
+            )
+        elif facts.procedure_query:
+            query_parts = [facts.procedure_query, "cost"]
+            if facts.location:
+                query_parts.append(facts.location)
+            query = " ".join(query_parts)
+            general_results = self.evidence_service.general_web_search(query)
+            public_evidence.extend(general_results)
+            trace.append(
+                ToolTrace(
+                    "general_web_search_fallback",
+                    {"query": query},
+                    {"items": [item.to_dict() for item in general_results]},
                 )
             )
 

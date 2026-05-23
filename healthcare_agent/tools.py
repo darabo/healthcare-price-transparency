@@ -25,7 +25,7 @@ def classify_case_type(message: str) -> str:
         return "find_cheaper_care"
     if any(token in text for token in ["bill", "estimate", "quoted", "charged", "fair", "eob", "$"]):
         return "estimate_review"
-    return "guided_triage"
+    return "general_inquiry"
 
 
 def extract_case_facts(message: str, case_type: str, classifier: Any | None = None) -> CaseFacts:
@@ -37,7 +37,7 @@ def extract_case_facts(message: str, case_type: str, classifier: Any | None = No
     setting = _extract_setting(text)
 
     missing = []
-    if not procedure:
+    if not procedure or not procedure.code:
         missing.append("procedure or CPT code")
     if case_type in {"estimate_review", "find_cheaper_care"} and not payer:
         missing.append("insurance plan or cash-pay preference")
@@ -51,7 +51,7 @@ def extract_case_facts(message: str, case_type: str, classifier: Any | None = No
         raw_message=message,
         case_type=case_type,
         procedure_query=procedure.label if procedure else None,
-        cpt_candidates=[procedure.code] if procedure else [],
+        cpt_candidates=[procedure.code] if procedure and procedure.code and procedure.code != "None" else [],
         amount=amount,
         payer=payer,
         location=location,
@@ -102,10 +102,10 @@ def procedure_lookup(query: str, classifier: Any | None = None) -> Procedure | N
         
     if classifier:
         result = classifier.classify(query)
-        if result and "code" in result:
+        if result and "label" in result:
             return Procedure(
-                code=result["code"],
-                label=result.get("label", f"Procedure {result['code']}"),
+                code=result.get("code") or "",
+                label=result["label"],
                 aliases=[],
                 setting_notes="Resolved via AI classification fallback."
             )
