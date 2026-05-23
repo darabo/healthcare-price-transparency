@@ -45,6 +45,9 @@ class PatientAdvocateAgent:
 
         rate = None
         care_options = []
+        mrf_matches = []
+        hospital_name = extract_hospital_name(message)
+        
         if facts.cpt_candidates:
             cpt = facts.cpt_candidates[0]
             rate = rate_distribution_lookup(cpt, facts.payer, facts.location)
@@ -55,6 +58,50 @@ class PatientAdvocateAgent:
                     rate.to_dict() if rate else {"error": "no comparable sample rate found"},
                 )
             )
+
+            mrf_links = self.evidence_service.discover_mrf_links(
+                hospital_name=hospital_name,
+                location=facts.location,
+            )
+            if mrf_links:
+                trace.append(
+                    ToolTrace(
+                        "discover_mrf_links",
+                        {"hospital_name": hospital_name, "location": facts.location},
+                        {"urls": mrf_links},
+                    )
+                )
+                self.mrf_service.sources.extend(mrf_links)
+
+            mrf_matches = self.mrf_service.find_charges(cpt=cpt, payer=facts.payer)
+            trace.append(
+                ToolTrace(
+                    "hospital_mrf_parse",
+                    {"cpt": cpt, "payer": facts.payer},
+                    {"items": [item.to_dict() for item in mrf_matches]},
+                )
+            )
+
+            if not rate and mrf_matches:
+                valid_charges = [m.negotiated_dollar for m in mrf_matches if m.status == "found" and m.negotiated_dollar is not None]
+                if valid_charges:
+                    import statistics
+                    med = int(statistics.median(valid_charges))
+                    low = int(min(valid_charges))
+                    high = int(max(valid_charges))
+                    rate = RateDistribution(
+                        cpt=cpt,
+                        payer=facts.payer or "unknown",
+                        location=facts.location or "unknown",
+                        median=med,
+                        p25=low,
+                        p75=high,
+                        cash_low=0,
+                        cash_high=0,
+                        sample_size=len(valid_charges),
+                        source="Dynamic MRF Parse"
+                    )
+
 
             if case_type in {"find_cheaper_care", "estimate_review", "negotiate_or_dispute"}:
                 care_options = find_care_options(cpt, facts.location, facts.payer)
@@ -73,8 +120,6 @@ class PatientAdvocateAgent:
         cms_benchmark = None
         cms_hospitals = []
         public_evidence = []
-        mrf_matches = []
-        hospital_name = extract_hospital_name(message)
         cms_hospitals = self.evidence_service.cms_open_hospital_lookup(hospital_name, facts.location)
         trace.append(
             ToolTrace(
@@ -104,29 +149,6 @@ class PatientAdvocateAgent:
                     "public_evidence_lookup",
                     {"hospital_name": hospital_name, "location": facts.location, "cpt": cpt},
                     {"items": [item.to_dict() for item in public_evidence]},
-                )
-            )
-
-            mrf_links = self.evidence_service.discover_mrf_links(
-                hospital_name=hospital_name,
-                location=facts.location,
-            )
-            if mrf_links:
-                trace.append(
-                    ToolTrace(
-                        "discover_mrf_links",
-                        {"hospital_name": hospital_name, "location": facts.location},
-                        {"urls": mrf_links},
-                    )
-                )
-                self.mrf_service.sources.extend(mrf_links)
-
-            mrf_matches = self.mrf_service.find_charges(cpt=cpt, payer=facts.payer)
-            trace.append(
-                ToolTrace(
-                    "hospital_mrf_parse",
-                    {"cpt": cpt, "payer": facts.payer},
-                    {"items": [item.to_dict() for item in mrf_matches]},
                 )
             )
 

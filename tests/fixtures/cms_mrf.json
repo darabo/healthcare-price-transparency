@@ -21,6 +21,27 @@
           "methodology": "fee schedule"
         }
       ]
+    },
+    {
+      "description": "X-ray of the lungs",
+      "setting": "outpatient",
+      "billing_code_information": [
+        {
+          "code": "71046",
+          "type": "CPT"
+        }
+      ],
+      "gross_charge": 800,
+      "discounted_cash": 250,
+      "standard_charges": [
+        {
+          "payer_name": "Aetna",
+          "plan_name": "Open Access",
+          "negotiated_dollar": 450,
+          "median_amount": 450,
+          "methodology": "fee schedule"
+        }
+      ]
     }
   ]
 }

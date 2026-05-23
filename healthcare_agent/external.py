@@ -386,14 +386,34 @@ class PublicEvidenceService:
         if not query:
             return []
             
+        urls = []
         try:
             payload = self.nimble.run_agent(
                 agent_id="hospitalpricingfiles_mrf_links_2026_05_23_ef2glucl",
                 params={"search_query": query}
             )
-            return _extract_urls_from_agent_response(payload)
+            urls = _extract_urls_from_agent_response(payload)
         except ExternalServiceError:
-            # Handle gracefully if template not found or error
+            pass
+
+        if urls:
+            return urls
+            
+        # Fallback: Web search on hospitalpricingfiles.org
+        search_query = f"{query} hospital price transparency file"
+        try:
+            payload = self.nimble.search(search_query, include_domains=["hospitalpricingfiles.org"], max_results=3)
+            results = payload.get("results", []) if isinstance(payload, dict) else []
+            for result in results:
+                content = " ".join(str(result.get(field, "")) for field in ["title", "description", "content", "url"])
+                matches = re.findall(r'https?://[^\s<>"\']+?\.(?:json|csv|zip)(?:\?[^\s<>"\']+)?', content)
+                urls.extend(matches)
+                matches2 = re.findall(r'https?://(?:www\.)?hospitalpricingfiles\.org/[^\s<>"\']+', content)
+                urls.extend(matches2)
+                
+            seen = set()
+            return [u for u in urls if not (u in seen or seen.add(u))]
+        except ExternalServiceError:
             return []
 
     def extract_public_context(self, cpt: str | None = None) -> list[WebEvidence]:
