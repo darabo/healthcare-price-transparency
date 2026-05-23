@@ -1,0 +1,5 @@
+hospital_name,last_updated_on,version,location_name,hospital_address,type_2_npi,attester_name
+Example Hospital,2026-04-01,3.0,Main Campus,1 Main St Hoboken NJ,1234567893,Jane Leader
+description,code | 1,code | 1 | type,setting,standard_charge | gross,standard_charge | discounted_cash,payer_name,plan_name,standard_charge | negotiated_dollar,median_amount,10th_percentile,90th_percentile,standard_charge | methodology
+MRI lower extremity joint without contrast,73721,CPT,outpatient,2500,900,Aetna,Open Access,780,760,620,1180,fee schedule
+MRI lower extremity joint without contrast,73721,CPT,outpatient,2500,900,United,Choice Plus,840,810,650,1250,fee schedule

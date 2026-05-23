@@ -1,0 +1,26 @@
+{
+  "hospital_name": "Example Hospital",
+  "standard_charge_information": [
+    {
+      "description": "MRI lower extremity joint without contrast",
+      "setting": "outpatient",
+      "billing_code_information": [
+        {
+          "code": "73721",
+          "type": "CPT"
+        }
+      ],
+      "gross_charge": 2500,
+      "discounted_cash": 900,
+      "standard_charges": [
+        {
+          "payer_name": "Aetna",
+          "plan_name": "Open Access",
+          "negotiated_dollar": 780,
+          "median_amount": 760,
+          "methodology": "fee schedule"
+        }
+      ]
+    }
+  ]
+}

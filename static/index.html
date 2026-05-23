@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Healthcare Price Advocate</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="workspace">
+        <aside class="sidebar" aria-label="Case summary">
+          <div>
+            <p class="eyebrow">MVP agent</p>
+            <h1>Healthcare Price Advocate</h1>
+          </div>
+
+          <div class="panel">
+            <h2>Workflows</h2>
+            <button class="preset" data-prompt="I was quoted $2,200 for a knee MRI in Hoboken with Aetna. Is that fair?">Estimate review</button>
+            <button class="preset" data-prompt="Find me a cheaper place for a knee MRI near Hoboken with Aetna.">Find cheaper care</button>
+            <button class="preset" data-prompt="Help me negotiate a $2,200 knee MRI bill in Hoboken with Aetna.">Dispute script</button>
+          </div>
+
+          <div class="panel compact">
+            <h2>Current Case</h2>
+            <dl id="caseFacts">
+              <div><dt>Type</dt><dd>Not started</dd></div>
+              <div><dt>Confidence</dt><dd>-</dd></div>
+              <div><dt>Missing</dt><dd>-</dd></div>
+            </dl>
+          </div>
+        </aside>
+
+        <section class="chat-region" aria-label="Chat">
+          <div id="messages" class="messages">
+            <article class="message assistant">
+              <div class="bubble">
+                <p>Tell me about an estimate, bill, or procedure you want to shop for. Include the price, insurance plan, and location if you have them.</p>
+              </div>
+            </article>
+          </div>
+
+          <section id="details" class="details" aria-label="Agent details" hidden>
+            <div class="tabs" role="tablist">
+              <button class="tab active" data-tab="comparison" type="button">Comparison</button>
+              <button class="tab" data-tab="artifact" type="button">Artifact</button>
+              <button class="tab" data-tab="trace" type="button">Tool Trace</button>
+            </div>
+            <div id="detailContent" class="detail-content"></div>
+          </section>
+
+          <form id="chatForm" class="composer">
+            <label class="file-button">
+              <span>Attach text</span>
+              <input id="fileInput" type="file" accept=".txt,text/plain">
+            </label>
+            <textarea id="messageInput" rows="3" placeholder="Example: I was quoted $2,200 for CPT 73721 in Hoboken with Aetna."></textarea>
+            <button id="sendButton" type="submit">Send</button>
+          </form>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
